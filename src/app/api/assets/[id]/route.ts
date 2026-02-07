@@ -11,7 +11,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const isAuthenticated = await checkAdminAuth();
+    const isAuthenticated = await checkAdminAuth(request);
     if (!isAuthenticated) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

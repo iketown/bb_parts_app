@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { generateInitials, getColorByIndex, MEMBER_COLORS } from '@/lib/utils';
+import { authenticatedFetch } from '@/lib/api-client';
 
 interface Song {
   id: string;
@@ -77,7 +78,7 @@ export default function AdminDashboard() {
     if (!newSongTitle.trim()) return;
 
     try {
-      const response = await fetch('/api/songs', {
+      const response = await authenticatedFetch('/api/songs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newSongTitle }),
@@ -103,7 +104,7 @@ export default function AdminDashboard() {
     if (!firstName.trim() || !lastName.trim()) return;
 
     try {
-      const response = await fetch('/api/members', {
+      const response = await authenticatedFetch('/api/members', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -131,7 +132,7 @@ export default function AdminDashboard() {
     if (!confirm('Are you sure you want to delete this song?')) return;
 
     try {
-      await fetch(`/api/songs/${id}`, { method: 'DELETE' });
+      await authenticatedFetch(`/api/songs/${id}`, { method: 'DELETE' });
       fetchData();
     } catch (error) {
       console.error('Error deleting song:', error);
@@ -142,7 +143,7 @@ export default function AdminDashboard() {
     if (!confirm('Are you sure you want to delete this member?')) return;
 
     try {
-      await fetch(`/api/members/${id}`, { method: 'DELETE' });
+      await authenticatedFetch(`/api/members/${id}`, { method: 'DELETE' });
       fetchData();
     } catch (error) {
       console.error('Error deleting member:', error);

@@ -8,7 +8,7 @@ import { checkAdminAuth } from '@/lib/auth';
 // POST /api/assets/upload - Upload a file to Storage and create Firestore doc
 export async function POST(request: NextRequest) {
   try {
-    const isAuthenticated = await checkAdminAuth();
+    const isAuthenticated = await checkAdminAuth(request);
     if (!isAuthenticated) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

@@ -32,7 +32,7 @@ export async function GET() {
 // POST /api/songs - Create a new song
 export async function POST(request: NextRequest) {
   try {
-    const isAuthenticated = await checkAdminAuth();
+    const isAuthenticated = await checkAdminAuth(request);
     if (!isAuthenticated) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

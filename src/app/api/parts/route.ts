@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
 // POST /api/parts - Create a new part
 export async function POST(request: NextRequest) {
   try {
-    const isAuthenticated = await checkAdminAuth();
+    const isAuthenticated = await checkAdminAuth(request);
     if (!isAuthenticated) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
