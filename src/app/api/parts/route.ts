@@ -42,10 +42,10 @@ export async function GET(request: NextRequest) {
 
     // Sort in memory
     if (songId || memberId) {
-      parts.sort((a: { sortOrder: number }, b: { sortOrder: number }) => a.sortOrder - b.sortOrder);
+      parts.sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0));
     } else {
-      parts.sort((a: { createdAt: string }, b: { createdAt: string }) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      parts.sort((a: any, b: any) =>
+        new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       );
     }
 
