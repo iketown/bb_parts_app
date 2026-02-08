@@ -13,8 +13,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" className="light" style={{ colorScheme: 'light' }}>
+      <body className="bg-white text-gray-900">
         <nav className="border-b">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">
