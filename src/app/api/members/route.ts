@@ -1,21 +1,19 @@
 // Members API - List and Create
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, getDocs, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { checkAdminAuth } from '@/lib/auth';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
+import { createAdminAuthErrorResponse, verifyAdminAuth } from '@/lib/auth';
 import { slugify, generateInitials, getColorByIndex } from '@/lib/utils';
 
 // GET /api/members - Get all members
 export async function GET() {
   try {
-    const membersRef = collection(db, 'members');
-    const q = query(membersRef, orderBy('firstName', 'asc'));
-    const snapshot = await getDocs(q);
+    const snapshot = await adminDb.collection('members').orderBy('firstName', 'asc').get();
 
     const members = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate().toISOString(),
+      createdAt: doc.data().createdAt?.toDate?.().toISOString(),
     }));
 
     return NextResponse.json({ members });
@@ -31,9 +29,16 @@ export async function GET() {
 // POST /api/members - Create a new member
 export async function POST(request: NextRequest) {
   try {
-    const isAuthenticated = await checkAdminAuth(request);
-    if (!isAuthenticated) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.isAuthorized) {
+      return createAdminAuthErrorResponse(authResult);
+    }
+
+    if (!hasFirebaseAdminCredentials) {
+      return NextResponse.json(
+        { error: 'Firebase Admin credentials are required for member writes' },
+        { status: 500 }
+      );
     }
 
     const { firstName, lastName, abbreviation, color } = await request.json();
@@ -52,20 +57,19 @@ export async function POST(request: NextRequest) {
     const finalAbbreviation = abbreviation || generateInitials(firstName, lastName);
 
     // Get all members to determine color index
-    const membersRef = collection(db, 'members');
-    const snapshot = await getDocs(membersRef);
+    const snapshot = await adminDb.collection('members').get();
     const memberCount = snapshot.size;
 
     // Use provided color or get one from palette based on member count
     const finalColor = color || getColorByIndex(memberCount);
 
-    const docRef = await addDoc(membersRef, {
+    const docRef = await adminDb.collection('members').add({
       firstName,
       lastName,
       abbreviation: finalAbbreviation,
       color: finalColor,
       slug,
-      createdAt: serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
 
     return NextResponse.json({

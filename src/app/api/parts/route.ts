@@ -1,8 +1,8 @@
 // Parts API - List and Create
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, getDocs, addDoc, serverTimestamp, query, where, orderBy } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { checkAdminAuth } from '@/lib/auth';
+import { FieldValue, type Query } from 'firebase-admin/firestore';
+import { adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
+import { createAdminAuthErrorResponse, verifyAdminAuth } from '@/lib/auth';
 
 // GET /api/parts?songId=xxx&memberId=xxx - Get parts with optional filters
 export async function GET(request: NextRequest) {
@@ -11,33 +11,23 @@ export async function GET(request: NextRequest) {
     const songId = searchParams.get('songId');
     const memberId = searchParams.get('memberId');
 
-    const partsRef = collection(db, 'parts');
-    let q;
+    let q: Query = adminDb.collection('parts');
 
-    // Build query based on filters
-    // Note: Firestore requires composite indexes for where() + orderBy() on different fields
-    // We'll fetch without orderBy and sort in memory to avoid index requirements
     if (songId && memberId) {
-      q = query(
-        partsRef,
-        where('songId', '==', songId),
-        where('memberId', '==', memberId)
-      );
+      q = q.where('songId', '==', songId).where('memberId', '==', memberId);
     } else if (songId) {
-      q = query(partsRef, where('songId', '==', songId));
+      q = q.where('songId', '==', songId);
     } else if (memberId) {
-      q = query(partsRef, where('memberId', '==', memberId));
-    } else {
-      q = query(partsRef);
+      q = q.where('memberId', '==', memberId);
     }
 
-    const snapshot = await getDocs(q);
+    const snapshot = await q.get();
 
     let parts = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate().toISOString(),
-      updatedAt: doc.data().updatedAt?.toDate().toISOString(),
+      createdAt: doc.data().createdAt?.toDate?.().toISOString(),
+      updatedAt: doc.data().updatedAt?.toDate?.().toISOString(),
     }));
 
     // Sort in memory
@@ -62,9 +52,16 @@ export async function GET(request: NextRequest) {
 // POST /api/parts - Create a new part
 export async function POST(request: NextRequest) {
   try {
-    const isAuthenticated = await checkAdminAuth(request);
-    if (!isAuthenticated) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.isAuthorized) {
+      return createAdminAuthErrorResponse(authResult);
+    }
+
+    if (!hasFirebaseAdminCredentials) {
+      return NextResponse.json(
+        { error: 'Firebase Admin credentials are required for part writes' },
+        { status: 500 }
+      );
     }
 
     const { songId, memberId, type, textNotes, assetIds, sortOrder } = await request.json();
@@ -83,17 +80,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const partsRef = collection(db, 'parts');
-
-    const docRef = await addDoc(partsRef, {
+    const docRef = await adminDb.collection('parts').add({
       songId,
       memberId,
       type,
       textNotes: textNotes || '',
       assetIds: assetIds || [],
       sortOrder: sortOrder || 0,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     return NextResponse.json({

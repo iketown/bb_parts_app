@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/lib/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { authenticatedFetch } from '@/lib/api-client';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 
 export default function AdminLayout({
   children,
@@ -14,29 +15,72 @@ export default function AdminLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
 
-  // Check auth state
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
+    let cancelled = false;
 
-      // Redirect to login if not authenticated (except on login page)
-      if (!currentUser && pathname !== '/admin/login') {
-        router.push('/admin/login');
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) {
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+
+          if (pathname !== '/admin/login') {
+            router.replace('/admin/login');
+          }
+        }
+
+        return;
+      }
+
+      try {
+        const response = await authenticatedFetch(
+          '/api/admin/session',
+          { cache: 'no-store' },
+          currentUser
+        );
+
+        if (!response.ok) {
+          throw new Error(response.status === 403 ? 'not-authorized' : 'session-check-failed');
+        }
+
+        if (!cancelled) {
+          setUser(currentUser);
+          setLoading(false);
+
+          if (pathname === '/admin/login') {
+            router.replace('/admin');
+          }
+        }
+      } catch (error) {
+        console.error('Admin session validation failed:', error);
+        await signOut(auth).catch((signOutError) => {
+          console.error('Failed to sign out unauthorized user:', signOutError);
+        });
+
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+          const errorCode =
+            error instanceof Error && error.message === 'not-authorized'
+              ? 'not-authorized'
+              : 'session-check-failed';
+          router.replace(`/admin/login?error=${errorCode}`);
+        }
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [pathname, router]);
 
-  // Don't show nav on login page
   if (pathname === '/admin/login') {
     return <>{children}</>;
   }
 
-  // Show loading state while checking auth
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -45,7 +89,6 @@ export default function AdminLayout({
     );
   }
 
-  // Don't render protected content if not authenticated
   if (!user) {
     return null;
   }

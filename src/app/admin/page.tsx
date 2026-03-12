@@ -32,6 +32,7 @@ export default function AdminDashboard() {
   const [members, setMembers] = useState<Member[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
   const [newSongTitle, setNewSongTitle] = useState('');
+  const [editingSong, setEditingSong] = useState<Song | null>(null);
   const [songSearch, setSongSearch] = useState('');
   const [showAddSongDialog, setShowAddSongDialog] = useState(false);
 
@@ -40,6 +41,7 @@ export default function AdminDashboard() {
   const [lastName, setLastName] = useState('');
   const [abbreviation, setAbbreviation] = useState('');
   const [selectedColor, setSelectedColor] = useState('');
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [showMemberForm, setShowMemberForm] = useState(false);
@@ -57,10 +59,10 @@ export default function AdminDashboard() {
 
   // Set default color when form opens
   useEffect(() => {
-    if (showMemberForm && !selectedColor) {
+    if (showMemberForm && !selectedColor && !editingMemberId) {
       setSelectedColor(getColorByIndex(members.length));
     }
-  }, [showMemberForm, members.length]);
+  }, [showMemberForm, selectedColor, members.length, editingMemberId]);
 
   const fetchData = async () => {
     try {
@@ -84,25 +86,100 @@ export default function AdminDashboard() {
     }
   };
 
-  const createSong = async (e: React.FormEvent) => {
+  const resetSongDialog = () => {
+    setEditingSong(null);
+    setNewSongTitle('');
+    setShowAddSongDialog(false);
+  };
+
+  const saveSong = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSongTitle.trim()) return;
 
     try {
-      const response = await authenticatedFetch('/api/songs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newSongTitle }),
-      });
+      const response = await authenticatedFetch(
+        editingSong ? `/api/songs/${editingSong.id}` : '/api/songs',
+        {
+          method: editingSong ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: newSongTitle }),
+        }
+      );
 
       if (response.ok) {
-        setNewSongTitle('');
-        setShowAddSongDialog(false);
+        resetSongDialog();
         fetchData();
       }
     } catch (error) {
-      console.error('Error creating song:', error);
+      console.error('Error saving song:', error);
     }
+  };
+
+  const openCreateSongDialog = () => {
+    setEditingSong(null);
+    setNewSongTitle('');
+    setShowAddSongDialog(true);
+  };
+
+  const openEditSongDialog = (song: Song) => {
+    setEditingSong(song);
+    setNewSongTitle(song.title);
+    setShowAddSongDialog(true);
+  };
+
+  const resetMemberForm = () => {
+    setEditingMemberId(null);
+    setFirstName('');
+    setLastName('');
+    setAbbreviation('');
+    setSelectedColor('');
+    setShowMemberForm(false);
+  };
+
+  const saveMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!firstName.trim() || !lastName.trim()) return;
+
+    try {
+      const response = await authenticatedFetch(
+        editingMemberId ? `/api/members/${editingMemberId}` : '/api/members',
+        {
+          method: editingMemberId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            firstName,
+            lastName,
+            abbreviation: abbreviation || generateInitials(firstName, lastName),
+            color: selectedColor,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        resetMemberForm();
+        fetchData();
+      }
+    } catch (error) {
+      console.error('Error saving member:', error);
+    }
+  };
+
+  const openCreateMemberForm = () => {
+    setEditingMemberId(null);
+    setFirstName('');
+    setLastName('');
+    setAbbreviation('');
+    setSelectedColor(getColorByIndex(members.length));
+    setShowMemberForm(true);
+  };
+
+  const openEditMemberForm = (member: Member) => {
+    setEditingMemberId(member.id);
+    setFirstName(member.firstName);
+    setLastName(member.lastName);
+    setAbbreviation(member.abbreviation);
+    setSelectedColor(member.color);
+    setShowMemberForm(true);
   };
 
   // Build a map of songId -> unique members who have parts
@@ -122,35 +199,6 @@ export default function AdminDashboard() {
   const filteredSongs = songs.filter((song) =>
     song.title.toLowerCase().includes(songSearch.toLowerCase())
   );
-
-  const createMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!firstName.trim() || !lastName.trim()) return;
-
-    try {
-      const response = await authenticatedFetch('/api/members', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName,
-          lastName,
-          abbreviation: abbreviation || generateInitials(firstName, lastName),
-          color: selectedColor,
-        }),
-      });
-
-      if (response.ok) {
-        setFirstName('');
-        setLastName('');
-        setAbbreviation('');
-        setSelectedColor('');
-        setShowMemberForm(false);
-        fetchData();
-      }
-    } catch (error) {
-      console.error('Error creating member:', error);
-    }
-  };
 
   const deleteSong = async (id: string) => {
     if (!confirm('Are you sure you want to delete this song?')) return;
@@ -198,7 +246,7 @@ export default function AdminDashboard() {
 
           {/* Add Song Button */}
           <button
-            onClick={() => setShowAddSongDialog(true)}
+            onClick={openCreateSongDialog}
             className="w-full mb-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             Add Song
@@ -232,12 +280,20 @@ export default function AdminDashboard() {
                       )}
                     </div>
                   </Link>
-                  <button
-                    onClick={() => deleteSong(song.id)}
-                    className="text-red-600 hover:text-red-800 text-sm ml-2"
-                  >
-                    Delete
-                  </button>
+                  <div className="flex items-center gap-3 ml-2">
+                    <button
+                      onClick={() => openEditSongDialog(song)}
+                      className="text-blue-600 hover:text-blue-800 text-sm"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => deleteSong(song.id)}
+                      className="text-red-600 hover:text-red-800 text-sm"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -256,13 +312,13 @@ export default function AdminDashboard() {
 
           {!showMemberForm ? (
             <button
-              onClick={() => setShowMemberForm(true)}
+              onClick={openCreateMemberForm}
               className="mb-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 w-full"
             >
               Add Member
             </button>
           ) : (
-            <form onSubmit={createMember} className="mb-4 space-y-3 p-4 border rounded">
+            <form onSubmit={saveMember} className="mb-4 space-y-3 p-4 border rounded">
               <div className="grid grid-cols-2 gap-2">
                 <input
                   type="text"
@@ -320,17 +376,11 @@ export default function AdminDashboard() {
                   type="submit"
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  Create Member
+                  {editingMemberId ? 'Update Member' : 'Create Member'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowMemberForm(false);
-                    setFirstName('');
-                    setLastName('');
-                    setAbbreviation('');
-                    setSelectedColor('');
-                  }}
+                  onClick={resetMemberForm}
                   className="px-4 py-2 border rounded hover:bg-gray-50"
                 >
                   Cancel
@@ -354,12 +404,20 @@ export default function AdminDashboard() {
                   </div>
                   <span>{member.firstName} {member.lastName}</span>
                 </div>
-                <button
-                  onClick={() => deleteMember(member.id)}
-                  className="text-red-600 hover:text-red-800 text-sm"
-                >
-                  Delete
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => openEditMemberForm(member)}
+                    className="text-blue-600 hover:text-blue-800 text-sm"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => deleteMember(member.id)}
+                    className="text-red-600 hover:text-red-800 text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
             {members.length === 0 && (
@@ -389,7 +447,7 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            <form onSubmit={createSong}>
+            <form onSubmit={saveSong}>
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">Song Title</label>
                 <input
@@ -408,14 +466,11 @@ export default function AdminDashboard() {
                   type="submit"
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  Create Song
+                  {editingSong ? 'Update Song' : 'Create Song'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowAddSongDialog(false);
-                    setNewSongTitle('');
-                  }}
+                  onClick={resetSongDialog}
                   className="px-4 py-2 border rounded hover:bg-gray-50"
                 >
                   Cancel

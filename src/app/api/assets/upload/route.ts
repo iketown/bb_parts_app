@@ -1,16 +1,22 @@
 // Asset Upload API
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
-import { checkAdminAuth } from '@/lib/auth';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb, adminStorage, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
+import { createAdminAuthErrorResponse, verifyAdminAuth } from '@/lib/auth';
 
 // POST /api/assets/upload - Upload a file to Storage and create Firestore doc
 export async function POST(request: NextRequest) {
   try {
-    const isAuthenticated = await checkAdminAuth(request);
-    if (!isAuthenticated) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.isAuthorized) {
+      return createAdminAuthErrorResponse(authResult);
+    }
+
+    if (!hasFirebaseAdminCredentials) {
+      return NextResponse.json(
+        { error: 'Firebase Admin credentials are required for asset writes' },
+        { status: 500 }
+      );
     }
 
     const formData = await request.formData();
@@ -27,33 +33,34 @@ export async function POST(request: NextRequest) {
 
     // Determine file type
     const fileType = file.type.includes('audio') ? 'mp3' : 'pdf';
-    const fileExtension = fileType === 'mp3' ? 'mp3' : 'pdf';
 
     // Create a unique storage path
     const timestamp = Date.now();
     const sanitizedFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
     const storagePath = `assets/${songId}/${timestamp}_${sanitizedFilename}`;
 
-    // Upload to Firebase Storage
-    const storageRef = ref(storage, storagePath);
     const fileBuffer = await file.arrayBuffer();
-    await uploadBytes(storageRef, fileBuffer, {
+    const downloadToken = crypto.randomUUID();
+
+    await adminStorage.file(storagePath).save(Buffer.from(fileBuffer), {
       contentType: file.type,
+      metadata: {
+        metadata: {
+          firebaseStorageDownloadTokens: downloadToken,
+        },
+      },
     });
 
-    // Get download URL
-    const downloadUrl = await getDownloadURL(storageRef);
+    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${adminStorage.name}/o/${encodeURIComponent(storagePath)}?alt=media&token=${downloadToken}`;
 
-    // Create Firestore document
-    const assetsRef = collection(db, 'assets');
-    const docRef = await addDoc(assetsRef, {
+    const docRef = await adminDb.collection('assets').add({
       filename: file.name,
       label,
       fileType,
       storagePath,
       downloadUrl,
       songId,
-      uploadedAt: serverTimestamp(),
+      uploadedAt: FieldValue.serverTimestamp(),
     });
 
     return NextResponse.json({

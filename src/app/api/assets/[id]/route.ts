@@ -1,9 +1,7 @@
 // Single Asset API - Delete
 import { NextRequest, NextResponse } from 'next/server';
-import { doc, getDoc, deleteDoc } from 'firebase/firestore';
-import { ref, deleteObject } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
-import { checkAdminAuth } from '@/lib/auth';
+import { adminDb, adminStorage, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
+import { createAdminAuthErrorResponse, verifyAdminAuth } from '@/lib/auth';
 
 // DELETE /api/assets/[id] - Delete asset from Storage and Firestore
 export async function DELETE(
@@ -11,16 +9,23 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const isAuthenticated = await checkAdminAuth(request);
-    if (!isAuthenticated) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.isAuthorized) {
+      return createAdminAuthErrorResponse(authResult);
+    }
+
+    if (!hasFirebaseAdminCredentials) {
+      return NextResponse.json(
+        { error: 'Firebase Admin credentials are required for asset writes' },
+        { status: 500 }
+      );
     }
 
     const { id } = await params;
-    const assetRef = doc(db, 'assets', id);
-    const assetSnap = await getDoc(assetRef);
+    const assetRef = adminDb.collection('assets').doc(id);
+    const assetSnap = await assetRef.get();
 
-    if (!assetSnap.exists()) {
+    if (!assetSnap.exists) {
       return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
     }
 
@@ -28,15 +33,14 @@ export async function DELETE(
 
     // Delete from Storage
     try {
-      const storageRef = ref(storage, assetData.storagePath);
-      await deleteObject(storageRef);
+      await adminStorage.file(assetData?.storagePath).delete();
     } catch (storageError) {
       console.error('Error deleting from storage:', storageError);
       // Continue even if storage deletion fails
     }
 
     // Delete from Firestore
-    await deleteDoc(assetRef);
+    await assetRef.delete();
 
     return NextResponse.json({ success: true });
   } catch (error) {

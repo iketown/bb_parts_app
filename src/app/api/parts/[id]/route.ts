@@ -1,8 +1,8 @@
 // Single Part API - Update and Delete
 import { NextRequest, NextResponse } from 'next/server';
-import { doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { checkAdminAuth } from '@/lib/auth';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
+import { createAdminAuthErrorResponse, verifyAdminAuth } from '@/lib/auth';
 
 // PUT /api/parts/[id] - Update a part
 export async function PUT(
@@ -10,9 +10,16 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const isAuthenticated = await checkAdminAuth(request);
-    if (!isAuthenticated) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.isAuthorized) {
+      return createAdminAuthErrorResponse(authResult);
+    }
+
+    if (!hasFirebaseAdminCredentials) {
+      return NextResponse.json(
+        { error: 'Firebase Admin credentials are required for part writes' },
+        { status: 500 }
+      );
     }
 
     const { id } = await params;
@@ -35,10 +42,9 @@ export async function PUT(
       );
     }
 
-    updateData.updatedAt = serverTimestamp();
+    updateData.updatedAt = FieldValue.serverTimestamp();
 
-    const partRef = doc(db, 'parts', id);
-    await updateDoc(partRef, updateData);
+    await adminDb.collection('parts').doc(id).update(updateData);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -56,14 +62,20 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const isAuthenticated = await checkAdminAuth(request);
-    if (!isAuthenticated) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.isAuthorized) {
+      return createAdminAuthErrorResponse(authResult);
+    }
+
+    if (!hasFirebaseAdminCredentials) {
+      return NextResponse.json(
+        { error: 'Firebase Admin credentials are required for part writes' },
+        { status: 500 }
+      );
     }
 
     const { id } = await params;
-    const partRef = doc(db, 'parts', id);
-    await deleteDoc(partRef);
+    await adminDb.collection('parts').doc(id).delete();
 
     return NextResponse.json({ success: true });
   } catch (error) {

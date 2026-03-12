@@ -1,7 +1,7 @@
 // Assets API - List
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import type { Query } from 'firebase-admin/firestore';
+import { adminDb } from '@/lib/firebase-admin';
 
 // GET /api/assets?songId=xxx - Get all assets (optionally filtered by songId)
 export async function GET(request: NextRequest) {
@@ -9,22 +9,20 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const songId = searchParams.get('songId');
 
-    const assetsRef = collection(db, 'assets');
-    let q;
+    let q: Query = adminDb.collection('assets');
 
     if (songId) {
-      // Use where clause without orderBy to avoid composite index requirement
-      q = query(assetsRef, where('songId', '==', songId));
+      q = q.where('songId', '==', songId);
     } else {
-      q = query(assetsRef, orderBy('uploadedAt', 'desc'));
+      q = q.orderBy('uploadedAt', 'desc');
     }
 
-    const snapshot = await getDocs(q);
+    const snapshot = await q.get();
 
     let assets = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
-      uploadedAt: doc.data().uploadedAt?.toDate().toISOString(),
+      uploadedAt: doc.data().uploadedAt?.toDate?.().toISOString(),
     }));
 
     // Sort in memory if we filtered by songId

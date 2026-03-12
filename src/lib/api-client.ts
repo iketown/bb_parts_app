@@ -1,5 +1,5 @@
-// API client utilities with authentication
 import { auth } from './firebase';
+import type { User } from 'firebase/auth';
 
 /**
  * Make an authenticated API request
@@ -7,18 +7,16 @@ import { auth } from './firebase';
  */
 export async function authenticatedFetch(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  userOverride?: User | null
 ): Promise<Response> {
-  const user = auth.currentUser;
+  const user = userOverride ?? auth.currentUser;
 
   if (!user) {
     throw new Error('User not authenticated');
   }
 
-  // Get the ID token
   const idToken = await user.getIdToken();
-
-  // Add Authorization header
   const headers = new Headers(options.headers);
   headers.set('Authorization', `Bearer ${idToken}`);
 
