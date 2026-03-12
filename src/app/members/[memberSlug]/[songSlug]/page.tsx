@@ -118,20 +118,18 @@ export default function MemberSongPartsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <Link href={`/members/${member.slug}`} className="text-blue-600 hover:underline mb-4 inline-block">
-        ← Back to {member.firstName} {member.lastName}'s Songs
-      </Link>
-
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">{song.title}</h1>
-        <div className="flex items-center gap-3">
+        <Link href={`/songs/${song.slug}`} className="hover:underline">
+          <h1 className="text-3xl font-bold mb-2">{song.title}</h1>
+        </Link>
+        <Link href={`/members/${member.slug}`} className="flex items-center gap-3 hover:underline">
           <MemberBadge
             abbreviation={member.abbreviation}
             color={member.color}
             size="md"
           />
-          <p className="text-xl text-gray-600">{member.firstName} {member.lastName}'s Parts</p>
-        </div>
+          <p className="text-xl text-gray-600">{member.firstName} {member.lastName}&apos;s Parts</p>
+        </Link>
       </div>
 
       {parts.length === 0 ? (

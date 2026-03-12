@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { generateInitials, getColorByIndex, MEMBER_COLORS } from '@/lib/utils';
 import { authenticatedFetch } from '@/lib/api-client';
+import MemberBadge from '@/components/MemberBadge';
 
 interface Song {
   id: string;
@@ -20,9 +21,16 @@ interface Member {
   slug: string;
 }
 
+interface Part {
+  id: string;
+  songId: string;
+  memberId: string;
+}
+
 export default function AdminDashboard() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [parts, setParts] = useState<Part[]>([]);
   const [newSongTitle, setNewSongTitle] = useState('');
   const [songSearch, setSongSearch] = useState('');
   const [showAddSongDialog, setShowAddSongDialog] = useState(false);
@@ -56,16 +64,19 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const [songsRes, membersRes] = await Promise.all([
+      const [songsRes, membersRes, partsRes] = await Promise.all([
         fetch('/api/songs'),
         fetch('/api/members'),
+        fetch('/api/parts'),
       ]);
 
       const songsData = await songsRes.json();
       const membersData = await membersRes.json();
+      const partsData = await partsRes.json();
 
       setSongs(songsData.songs || []);
       setMembers(membersData.members || []);
+      setParts(partsData.parts || []);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -93,6 +104,19 @@ export default function AdminDashboard() {
       console.error('Error creating song:', error);
     }
   };
+
+  // Build a map of songId -> unique members who have parts
+  const songMembersMap = new Map<string, Member[]>();
+  for (const part of parts) {
+    if (!songMembersMap.has(part.songId)) {
+      songMembersMap.set(part.songId, []);
+    }
+    const existing = songMembersMap.get(part.songId)!;
+    if (!existing.some((m) => m.id === part.memberId)) {
+      const member = members.find((m) => m.id === part.memberId);
+      if (member) existing.push(member);
+    }
+  }
 
   // Filter songs based on search
   const filteredSongs = songs.filter((song) =>
@@ -181,25 +205,42 @@ export default function AdminDashboard() {
           </button>
 
           <div className="space-y-2">
-            {filteredSongs.map((song) => (
-              <div
-                key={song.id}
-                className="flex items-center justify-between p-3 border rounded hover:bg-gray-50"
-              >
-                <Link
-                  href={`/admin/songs/${song.slug}`}
-                  className="flex-1 hover:underline"
+            {filteredSongs.map((song) => {
+              const assignedMembers = songMembersMap.get(song.id) || [];
+              return (
+                <div
+                  key={song.id}
+                  className="flex items-center justify-between p-3 border rounded hover:bg-gray-50"
                 >
-                  {song.title}
-                </Link>
-                <button
-                  onClick={() => deleteSong(song.id)}
-                  className="text-red-600 hover:text-red-800 text-sm"
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
+                  <Link
+                    href={`/admin/songs/${song.slug}`}
+                    className="flex-1 hover:underline"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>{song.title}</span>
+                      {assignedMembers.length > 0 && (
+                        <div className="flex gap-1">
+                          {assignedMembers.map((member) => (
+                            <MemberBadge
+                              key={member.id}
+                              abbreviation={member.abbreviation}
+                              color={member.color}
+                              size="sm"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Link>
+                  <button
+                    onClick={() => deleteSong(song.id)}
+                    className="text-red-600 hover:text-red-800 text-sm ml-2"
+                  >
+                    Delete
+                  </button>
+                </div>
+              );
+            })}
             {filteredSongs.length === 0 && songSearch && (
               <p className="text-gray-500 text-sm">No songs match &quot;{songSearch}&quot;</p>
             )}

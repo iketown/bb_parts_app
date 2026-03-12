@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { authenticatedFetch } from '@/lib/api-client';
 
 interface Song {
   id: string;
@@ -207,7 +208,7 @@ export default function SongManagementPage() {
       formData.append('label', label);
       formData.append('songId', song.id);
 
-      const response = await fetch('/api/assets/upload', {
+      const response = await authenticatedFetch('/api/assets/upload', {
         method: 'POST',
         body: formData,
       });
@@ -332,7 +333,7 @@ export default function SongManagementPage() {
     if (!selectedMemberId || !song) return;
 
     try {
-      const response = await fetch('/api/parts', {
+      const response = await authenticatedFetch('/api/parts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -360,7 +361,7 @@ export default function SongManagementPage() {
     if (!confirm('Delete this part?')) return;
 
     try {
-      await fetch(`/api/parts/${id}`, { method: 'DELETE' });
+      await authenticatedFetch(`/api/parts/${id}`, { method: 'DELETE' });
       fetchData();
     } catch (error) {
       console.error('Error deleting part:', error);
@@ -371,7 +372,7 @@ export default function SongManagementPage() {
     if (!confirm('Delete this asset? This will remove it from storage and all parts using it.')) return;
 
     try {
-      await fetch(`/api/assets/${id}`, { method: 'DELETE' });
+      await authenticatedFetch(`/api/assets/${id}`, { method: 'DELETE' });
       fetchData();
     } catch (error) {
       console.error('Error deleting asset:', error);
@@ -416,7 +417,7 @@ export default function SongManagementPage() {
     if (!editingPart) return;
 
     try {
-      const response = await fetch(`/api/parts/${editingPart.id}`, {
+      const response = await authenticatedFetch(`/api/parts/${editingPart.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -477,7 +478,7 @@ export default function SongManagementPage() {
     try {
       await Promise.all(
         updatedParts.map((part) =>
-          fetch(`/api/parts/${part.id}`, {
+          authenticatedFetch(`/api/parts/${part.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sortOrder: part.sortOrder }),
