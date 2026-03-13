@@ -66,3 +66,20 @@ export const MEMBER_COLORS = [
 export function getColorByIndex(index: number): string {
   return MEMBER_COLORS[index % MEMBER_COLORS.length];
 }
+
+/**
+ * Normalize a tag input into a unique, trimmed list.
+ */
+export function normalizeMemberTags(tags: unknown): string[] {
+  const rawTags = Array.isArray(tags)
+    ? tags
+    : typeof tags === 'string'
+      ? tags.split(',')
+      : [];
+
+  const normalizedTags = rawTags
+    .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+    .filter(Boolean);
+
+  return Array.from(new Set(normalizedTags));
+}

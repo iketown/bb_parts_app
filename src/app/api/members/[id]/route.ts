@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import { createAdminAuthErrorResponse, verifyAdminAuth } from '@/lib/auth';
-import { generateInitials, slugify } from '@/lib/utils';
+import { generateInitials, normalizeMemberTags, slugify } from '@/lib/utils';
 
 // GET /api/members/[id] - Get a single member
 export async function GET(
@@ -20,6 +20,7 @@ export async function GET(
     const member = {
       id: memberSnap.id,
       ...memberSnap.data(),
+      tags: normalizeMemberTags(memberSnap.data()?.tags),
       createdAt: memberSnap.data()?.createdAt?.toDate?.().toISOString(),
     };
 
@@ -82,7 +83,7 @@ export async function PUT(
       );
     }
 
-    const { firstName, lastName, abbreviation, color } = await request.json();
+    const { firstName, lastName, abbreviation, color, tags } = await request.json();
 
     if (!firstName || !lastName) {
       return NextResponse.json(
@@ -98,6 +99,7 @@ export async function PUT(
       lastName,
       abbreviation: abbreviation || generateInitials(firstName, lastName),
       color,
+      tags: normalizeMemberTags(tags),
       slug: slugify(`${firstName} ${lastName}`),
     });
 

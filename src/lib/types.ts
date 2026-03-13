@@ -14,6 +14,7 @@ export interface Member {
   lastName: string;
   abbreviation: string; // e.g., "CL" for Christian Love
   color: string; // Hex color code for badges
+  tags: string[];
   slug: string;
   createdAt: Date;
 }

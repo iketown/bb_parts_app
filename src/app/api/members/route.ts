@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb, hasFirebaseAdminCredentials } from '@/lib/firebase-admin';
 import { createAdminAuthErrorResponse, verifyAdminAuth } from '@/lib/auth';
-import { slugify, generateInitials, getColorByIndex } from '@/lib/utils';
+import { slugify, generateInitials, getColorByIndex, normalizeMemberTags } from '@/lib/utils';
 
 // GET /api/members - Get all members
 export async function GET() {
@@ -13,6 +13,7 @@ export async function GET() {
     const members = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
+      tags: normalizeMemberTags(doc.data().tags),
       createdAt: doc.data().createdAt?.toDate?.().toISOString(),
     }));
 
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { firstName, lastName, abbreviation, color } = await request.json();
+    const { firstName, lastName, abbreviation, color, tags } = await request.json();
 
     if (!firstName || !lastName) {
       return NextResponse.json(
@@ -62,12 +63,14 @@ export async function POST(request: NextRequest) {
 
     // Use provided color or get one from palette based on member count
     const finalColor = color || getColorByIndex(memberCount);
+    const normalizedTags = normalizeMemberTags(tags);
 
     const docRef = await adminDb.collection('members').add({
       firstName,
       lastName,
       abbreviation: finalAbbreviation,
       color: finalColor,
+      tags: normalizedTags,
       slug,
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -78,6 +81,7 @@ export async function POST(request: NextRequest) {
       slug,
       abbreviation: finalAbbreviation,
       color: finalColor,
+      tags: normalizedTags,
     });
   } catch (error) {
     console.error('Error creating member:', error);

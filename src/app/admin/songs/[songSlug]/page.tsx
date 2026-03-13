@@ -16,13 +16,14 @@ interface Member {
   lastName: string;
   abbreviation: string;
   color: string;
+  tags: string[];
 }
 
 interface Asset {
   id: string;
   label: string;
   filename: string;
-  fileType: string;
+  fileType: 'mp3' | 'pdf';
   downloadUrl: string;
 }
 
@@ -34,6 +35,30 @@ interface Part {
   memberName?: string;
   assetIds: string[];
   sortOrder: number;
+}
+
+interface SuggestedPartAction {
+  assetId: string;
+  assetLabel: string;
+  memberId: string;
+  memberName: string;
+  matchedTag: string;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function titleMatchesTag(title: string, tag: string): boolean {
+  const normalizedTitle = title.trim().toLowerCase();
+  const normalizedTag = tag.trim().toLowerCase();
+
+  if (!normalizedTitle || !normalizedTag) {
+    return false;
+  }
+
+  const tagPattern = new RegExp(`(^|[^a-z0-9])${escapeRegExp(normalizedTag)}($|[^a-z0-9])`, 'i');
+  return tagPattern.test(normalizedTitle);
 }
 
 export default function SongManagementPage() {
@@ -82,6 +107,8 @@ export default function SongManagementPage() {
     label: string;
     isEditDialog: boolean;
   } | null>(null);
+  const [suggestedPartActions, setSuggestedPartActions] = useState<SuggestedPartAction[]>([]);
+  const [creatingSuggestedPartKey, setCreatingSuggestedPartKey] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -215,6 +242,44 @@ export default function SongManagementPage() {
 
       if (response.ok) {
         const data = await response.json();
+        const uploadedAsset: Asset = {
+          id: data.id,
+          label,
+          filename: file.name,
+          fileType: file.type.includes('audio') ? 'mp3' : 'pdf',
+          downloadUrl: data.downloadUrl,
+        };
+
+        if (!isEditDialog && uploadedAsset.fileType === 'mp3') {
+          const newSuggestions = members
+            .flatMap((member) => {
+              const matchingTag = (member.tags || []).find((tag) => titleMatchesTag(label, tag));
+
+              if (!matchingTag) {
+                return [];
+              }
+
+              return [{
+                assetId: uploadedAsset.id,
+                assetLabel: uploadedAsset.label,
+                memberId: member.id,
+                memberName: `${member.firstName} ${member.lastName}`,
+                matchedTag: matchingTag,
+              }];
+            });
+
+          if (newSuggestions.length > 0) {
+            setSuggestedPartActions((prev) => {
+              const dedupedSuggestions = newSuggestions.filter((suggestion) => (
+                !prev.some((existing) =>
+                  existing.assetId === suggestion.assetId && existing.memberId === suggestion.memberId
+                )
+              ));
+
+              return dedupedSuggestions.length > 0 ? [...dedupedSuggestions, ...prev] : prev;
+            });
+          }
+        }
 
         if (isEditDialog) {
           setEditAssetIds((prev) => [...prev, data.id]);
@@ -354,6 +419,43 @@ export default function SongManagementPage() {
       }
     } catch (error) {
       console.error('Error creating part:', error);
+    }
+  };
+
+  const dismissSuggestedPartAction = (assetId: string, memberId: string) => {
+    setSuggestedPartActions((prev) =>
+      prev.filter((suggestion) => suggestion.assetId !== assetId || suggestion.memberId !== memberId)
+    );
+  };
+
+  const createSuggestedPart = async (suggestion: SuggestedPartAction) => {
+    if (!song) return;
+
+    const suggestionKey = `${suggestion.assetId}:${suggestion.memberId}`;
+    setCreatingSuggestedPartKey(suggestionKey);
+
+    try {
+      const response = await authenticatedFetch('/api/parts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          songId: song.id,
+          memberId: suggestion.memberId,
+          type: 'vocal',
+          textNotes: '',
+          assetIds: [suggestion.assetId],
+          sortOrder: parts.length,
+        }),
+      });
+
+      if (response.ok) {
+        dismissSuggestedPartAction(suggestion.assetId, suggestion.memberId);
+        fetchData();
+      }
+    } catch (error) {
+      console.error('Error creating suggested part:', error);
+    } finally {
+      setCreatingSuggestedPartKey(null);
     }
   };
 
@@ -602,6 +704,46 @@ export default function SongManagementPage() {
           </div>
         )}
       </div>
+
+      {suggestedPartActions.length > 0 && (
+        <div className="space-y-3">
+          {suggestedPartActions.map((suggestion) => {
+            const suggestionKey = `${suggestion.assetId}:${suggestion.memberId}`;
+            return (
+              <div
+                key={suggestionKey}
+                className="flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 p-4 md:flex-row md:items-center md:justify-between"
+              >
+                <div>
+                  <p className="font-medium text-green-900">
+                    Create {song.title} part for {suggestion.memberName}
+                  </p>
+                  <p className="text-sm text-green-800">
+                    Matched &quot;{suggestion.assetLabel}&quot; on tag &quot;{suggestion.matchedTag}&quot;.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => dismissSuggestedPartAction(suggestion.assetId, suggestion.memberId)}
+                    className="px-4 py-2 rounded border border-green-300 bg-white text-green-900 hover:bg-green-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => createSuggestedPart(suggestion)}
+                    disabled={creatingSuggestedPartKey === suggestionKey}
+                    className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:bg-green-300"
+                  >
+                    {creatingSuggestedPartKey === suggestionKey ? 'Creating...' : 'OK'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Create Part Section */}
       <div className="bg-white p-6 rounded-lg border">

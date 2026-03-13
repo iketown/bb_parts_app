@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import MemberBadge from '@/components/MemberBadge';
+import { formatDate } from '@/lib/utils';
 
 interface Member {
   id: string;
@@ -30,6 +31,7 @@ interface Part {
 interface Asset {
   id: string;
   fileType: 'mp3' | 'pdf';
+  uploadedAt?: string;
 }
 
 export default function MemberDetailPage() {
@@ -41,6 +43,10 @@ export default function MemberDetailPage() {
   const [parts, setParts] = useState<Part[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
+  const [songSearch, setSongSearch] = useState('');
+  const [sortBy, setSortBy] = useState<'date' | 'title'>('date');
+  const [dateSortDirection, setDateSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [titleSortDirection, setTitleSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
     fetchData();
@@ -98,7 +104,6 @@ export default function MemberDetailPage() {
   };
 
   const getAssetSummary = (songId: string): string => {
-    // Get all assetIds from this member's parts for this song
     const songParts = parts.filter((p) => p.songId === songId);
     const assetIds = [...new Set(songParts.flatMap((p) => p.assetIds))];
 
@@ -112,17 +117,71 @@ export default function MemberDetailPage() {
 
     let mp3Count = 0;
     let pdfCount = 0;
+    let latestUploadedAt: string | null = null;
     for (const id of assetIds) {
       const asset = assets.find((a) => a.id === id);
       if (asset?.fileType === 'mp3') mp3Count++;
       else if (asset?.fileType === 'pdf') pdfCount++;
+      if (asset?.uploadedAt && (!latestUploadedAt || asset.uploadedAt > latestUploadedAt)) {
+        latestUploadedAt = asset.uploadedAt;
+      }
     }
 
     const labels: string[] = [];
     if (mp3Count > 0) labels.push(mp3Count === 1 ? 'mp3' : `${mp3Count} mp3s`);
     if (pdfCount > 0) labels.push(pdfCount === 1 ? 'pdf' : `${pdfCount} pdfs`);
 
-    return labels.join(' & ');
+    const summary = labels.join(' & ');
+    return latestUploadedAt
+      ? `${summary} - ${formatDate(new Date(latestUploadedAt))}`
+      : summary;
+  };
+
+  const getLatestUploadedAt = (songId: string): string | null => {
+    const songParts = parts.filter((p) => p.songId === songId);
+    const assetIds = [...new Set(songParts.flatMap((p) => p.assetIds))];
+
+    let latestUploadedAt: string | null = null;
+    for (const id of assetIds) {
+      const asset = assets.find((a) => a.id === id);
+      if (asset?.uploadedAt && (!latestUploadedAt || asset.uploadedAt > latestUploadedAt)) {
+        latestUploadedAt = asset.uploadedAt;
+      }
+    }
+
+    return latestUploadedAt;
+  };
+
+  const filteredAndSortedSongs = songs
+    .filter((song) => song.title.toLowerCase().includes(songSearch.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'title') {
+        const comparison = a.title.localeCompare(b.title);
+        return titleSortDirection === 'asc' ? comparison : -comparison;
+      }
+
+      const aDate = getLatestUploadedAt(a.id);
+      const bDate = getLatestUploadedAt(b.id);
+      const comparison = new Date(aDate || 0).getTime() - new Date(bDate || 0).getTime();
+      return dateSortDirection === 'asc' ? comparison : -comparison;
+    });
+
+  const toggleDateSort = () => {
+    if (sortBy === 'date') {
+      setDateSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+
+    setSortBy('date');
+  };
+
+  const toggleTitleSort = () => {
+    if (sortBy === 'title') {
+      setTitleSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+
+    setSortBy('title');
   };
 
   if (loading) {
@@ -164,8 +223,37 @@ export default function MemberDetailPage() {
       ) : (
         <div>
           <h2 className="text-xl font-semibold mb-4">Songs with parts:</h2>
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center">
+            <input
+              type="text"
+              value={songSearch}
+              onChange={(e) => setSongSearch(e.target.value)}
+              placeholder="Search songs..."
+              className="flex-1 rounded border px-3 py-2"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={toggleDateSort}
+                className={`rounded border px-3 py-2 text-sm ${
+                  sortBy === 'date' ? 'border-blue-600 text-blue-600' : 'border-gray-300'
+                }`}
+              >
+                {dateSortDirection === 'asc' ? 'Date ^' : 'Date v'}
+              </button>
+              <button
+                type="button"
+                onClick={toggleTitleSort}
+                className={`rounded border px-3 py-2 text-sm ${
+                  sortBy === 'title' ? 'border-blue-600 text-blue-600' : 'border-gray-300'
+                }`}
+              >
+                {titleSortDirection === 'asc' ? 'A-Z' : 'Z-A'}
+              </button>
+            </div>
+          </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {songs.map((song) => {
+            {filteredAndSortedSongs.map((song) => {
               const summary = getAssetSummary(song.id);
               return (
                 <Link
@@ -181,6 +269,11 @@ export default function MemberDetailPage() {
               );
             })}
           </div>
+          {filteredAndSortedSongs.length === 0 && songSearch && (
+            <p className="mt-4 text-sm text-gray-500">
+              No songs match &quot;{songSearch}&quot;
+            </p>
+          )}
         </div>
       )}
     </div>

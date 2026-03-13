@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { generateInitials, getColorByIndex, MEMBER_COLORS } from '@/lib/utils';
-import { authenticatedFetch } from '@/lib/api-client';
-import MemberBadge from '@/components/MemberBadge';
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { generateInitials, getColorByIndex, MEMBER_COLORS } from "@/lib/utils";
+import { authenticatedFetch } from "@/lib/api-client";
+import MemberBadge from "@/components/MemberBadge";
 
 interface Song {
   id: string;
@@ -18,6 +18,7 @@ interface Member {
   lastName: string;
   abbreviation: string;
   color: string;
+  tags: string[];
   slug: string;
 }
 
@@ -31,16 +32,17 @@ export default function AdminDashboard() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
-  const [newSongTitle, setNewSongTitle] = useState('');
+  const [newSongTitle, setNewSongTitle] = useState("");
   const [editingSong, setEditingSong] = useState<Song | null>(null);
-  const [songSearch, setSongSearch] = useState('');
+  const [songSearch, setSongSearch] = useState("");
   const [showAddSongDialog, setShowAddSongDialog] = useState(false);
 
   // Member form state
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [abbreviation, setAbbreviation] = useState('');
-  const [selectedColor, setSelectedColor] = useState('');
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [abbreviation, setAbbreviation] = useState("");
+  const [selectedColor, setSelectedColor] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -67,9 +69,9 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     try {
       const [songsRes, membersRes, partsRes] = await Promise.all([
-        fetch('/api/songs'),
-        fetch('/api/members'),
-        fetch('/api/parts'),
+        fetch("/api/songs"),
+        fetch("/api/members"),
+        fetch("/api/parts"),
       ]);
 
       const songsData = await songsRes.json();
@@ -80,7 +82,7 @@ export default function AdminDashboard() {
       setMembers(membersData.members || []);
       setParts(partsData.parts || []);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error("Error fetching data:", error);
     } finally {
       setLoading(false);
     }
@@ -88,7 +90,7 @@ export default function AdminDashboard() {
 
   const resetSongDialog = () => {
     setEditingSong(null);
-    setNewSongTitle('');
+    setNewSongTitle("");
     setShowAddSongDialog(false);
   };
 
@@ -98,12 +100,12 @@ export default function AdminDashboard() {
 
     try {
       const response = await authenticatedFetch(
-        editingSong ? `/api/songs/${editingSong.id}` : '/api/songs',
+        editingSong ? `/api/songs/${editingSong.id}` : "/api/songs",
         {
-          method: editingSong ? 'PUT' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: editingSong ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: newSongTitle }),
-        }
+        },
       );
 
       if (response.ok) {
@@ -111,13 +113,13 @@ export default function AdminDashboard() {
         fetchData();
       }
     } catch (error) {
-      console.error('Error saving song:', error);
+      console.error("Error saving song:", error);
     }
   };
 
   const openCreateSongDialog = () => {
     setEditingSong(null);
-    setNewSongTitle('');
+    setNewSongTitle("");
     setShowAddSongDialog(true);
   };
 
@@ -129,10 +131,11 @@ export default function AdminDashboard() {
 
   const resetMemberForm = () => {
     setEditingMemberId(null);
-    setFirstName('');
-    setLastName('');
-    setAbbreviation('');
-    setSelectedColor('');
+    setFirstName("");
+    setLastName("");
+    setAbbreviation("");
+    setSelectedColor("");
+    setTagsInput("");
     setShowMemberForm(false);
   };
 
@@ -142,17 +145,21 @@ export default function AdminDashboard() {
 
     try {
       const response = await authenticatedFetch(
-        editingMemberId ? `/api/members/${editingMemberId}` : '/api/members',
+        editingMemberId ? `/api/members/${editingMemberId}` : "/api/members",
         {
-          method: editingMemberId ? 'PUT' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: editingMemberId ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             firstName,
             lastName,
             abbreviation: abbreviation || generateInitials(firstName, lastName),
             color: selectedColor,
+            tags: tagsInput
+              .split(",")
+              .map((tag) => tag.trim())
+              .filter(Boolean),
           }),
-        }
+        },
       );
 
       if (response.ok) {
@@ -160,16 +167,17 @@ export default function AdminDashboard() {
         fetchData();
       }
     } catch (error) {
-      console.error('Error saving member:', error);
+      console.error("Error saving member:", error);
     }
   };
 
   const openCreateMemberForm = () => {
     setEditingMemberId(null);
-    setFirstName('');
-    setLastName('');
-    setAbbreviation('');
+    setFirstName("");
+    setLastName("");
+    setAbbreviation("");
     setSelectedColor(getColorByIndex(members.length));
+    setTagsInput("");
     setShowMemberForm(true);
   };
 
@@ -179,6 +187,7 @@ export default function AdminDashboard() {
     setLastName(member.lastName);
     setAbbreviation(member.abbreviation);
     setSelectedColor(member.color);
+    setTagsInput((member.tags || []).join(", "));
     setShowMemberForm(true);
   };
 
@@ -197,28 +206,41 @@ export default function AdminDashboard() {
 
   // Filter songs based on search
   const filteredSongs = songs.filter((song) =>
-    song.title.toLowerCase().includes(songSearch.toLowerCase())
+    song.title.toLowerCase().includes(songSearch.toLowerCase()),
   );
+  const trimmedFirstName = firstName.trim();
+  const trimmedLastName = lastName.trim();
+  const tagPlaceholderExamples = [
+    trimmedFirstName,
+    trimmedLastName,
+    trimmedFirstName && trimmedLastName
+      ? generateInitials(trimmedFirstName, trimmedLastName)
+      : "",
+  ].filter(Boolean);
+  const tagsPlaceholder =
+    tagPlaceholderExamples.length > 0
+      ? `Comma-separated tags, e.g. ${tagPlaceholderExamples.join(", ")}`
+      : "Comma-separated tags";
 
   const deleteSong = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this song?')) return;
+    if (!confirm("Are you sure you want to delete this song?")) return;
 
     try {
-      await authenticatedFetch(`/api/songs/${id}`, { method: 'DELETE' });
+      await authenticatedFetch(`/api/songs/${id}`, { method: "DELETE" });
       fetchData();
     } catch (error) {
-      console.error('Error deleting song:', error);
+      console.error("Error deleting song:", error);
     }
   };
 
   const deleteMember = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this member?')) return;
+    if (!confirm("Are you sure you want to delete this member?")) return;
 
     try {
-      await authenticatedFetch(`/api/members/${id}`, { method: 'DELETE' });
+      await authenticatedFetch(`/api/members/${id}`, { method: "DELETE" });
       fetchData();
     } catch (error) {
-      console.error('Error deleting member:', error);
+      console.error("Error deleting member:", error);
     }
   };
 
@@ -298,7 +320,9 @@ export default function AdminDashboard() {
               );
             })}
             {filteredSongs.length === 0 && songSearch && (
-              <p className="text-gray-500 text-sm">No songs match &quot;{songSearch}&quot;</p>
+              <p className="text-gray-500 text-sm">
+                No songs match &quot;{songSearch}&quot;
+              </p>
             )}
             {songs.length === 0 && (
               <p className="text-gray-500 text-sm">No songs yet</p>
@@ -318,7 +342,10 @@ export default function AdminDashboard() {
               Add Member
             </button>
           ) : (
-            <form onSubmit={saveMember} className="mb-4 space-y-3 p-4 border rounded">
+            <form
+              onSubmit={saveMember}
+              className="mb-4 space-y-3 p-4 border rounded"
+            >
               <div className="grid grid-cols-2 gap-2">
                 <input
                   type="text"
@@ -345,9 +372,22 @@ export default function AdminDashboard() {
                 <input
                   type="text"
                   value={abbreviation}
-                  onChange={(e) => setAbbreviation(e.target.value.toUpperCase())}
+                  onChange={(e) =>
+                    setAbbreviation(e.target.value.toUpperCase())
+                  }
                   placeholder="Auto-generated from initials"
                   maxLength={3}
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Tags</label>
+                <input
+                  type="text"
+                  value={tagsInput}
+                  onChange={(e) => setTagsInput(e.target.value)}
+                  placeholder={tagsPlaceholder}
                   className="w-full px-3 py-2 border rounded"
                 />
               </div>
@@ -363,7 +403,9 @@ export default function AdminDashboard() {
                       type="button"
                       onClick={() => setSelectedColor(color)}
                       className={`w-10 h-10 rounded border-2 ${
-                        selectedColor === color ? 'border-gray-900' : 'border-gray-300'
+                        selectedColor === color
+                          ? "border-gray-900"
+                          : "border-gray-300"
                       }`}
                       style={{ backgroundColor: color }}
                     />
@@ -376,7 +418,7 @@ export default function AdminDashboard() {
                   type="submit"
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  {editingMemberId ? 'Update Member' : 'Create Member'}
+                  {editingMemberId ? "Update Member" : "Create Member"}
                 </button>
                 <button
                   type="button"
@@ -402,7 +444,16 @@ export default function AdminDashboard() {
                   >
                     {member.abbreviation}
                   </div>
-                  <span>{member.firstName} {member.lastName}</span>
+                  <div>
+                    <div>
+                      {member.firstName} {member.lastName}
+                    </div>
+                    {member.tags.length > 0 && (
+                      <div className="text-xs text-gray-500">
+                        {member.tags.join(", ")}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
@@ -449,7 +500,9 @@ export default function AdminDashboard() {
 
             <form onSubmit={saveSong}>
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-1">Song Title</label>
+                <label className="block text-sm font-medium mb-1">
+                  Song Title
+                </label>
                 <input
                   type="text"
                   value={newSongTitle}
@@ -466,7 +519,7 @@ export default function AdminDashboard() {
                   type="submit"
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  {editingSong ? 'Update Song' : 'Create Song'}
+                  {editingSong ? "Update Song" : "Create Song"}
                 </button>
                 <button
                   type="button"
